@@ -84,6 +84,12 @@ void DummyPlayer_Init(Actor* actor, PlayState* play) {
     }
     player->cylinder.base.ocFlags2 = OC2_TYPE_1;
     player->cylinder.info.bumperFlags = BUMP_ON | BUMP_HOOKABLE | BUMP_NO_HITMARK;
+    if (client.isBuddy) {
+        // The attacker is never told it hit something: many enemies assume whatever they hit is
+        // you and knock you back or hurt you (a buddy getting hit used to hurt you too). The
+        // buddy still registers the hit (AC side) and the app takes its hearts.
+        player->cylinder.info.bumperFlags |= BUMP_NO_AT_INFO;
+    }
     player->actor.flags |= ACTOR_FLAG_HOOKSHOT_PULLS_PLAYER;
     player->cylinder.dim.radius = 30;
     player->actor.colChkInfo.damageTable = &DummyPlayerDamageTable;
