@@ -134,7 +134,7 @@ VoiceStudioSpeechSynthesizer::~VoiceStudioSpeechSynthesizer() {
     delete mImpl;
 }
 
-void VoiceStudioSpeechSynthesizer::Speak(const char* text, const char* language) {
+void VoiceStudioSpeechSynthesizer::Speak(const char* text, const char* /*language*/) {
     if (!text || !*text) {
         return;
     }
