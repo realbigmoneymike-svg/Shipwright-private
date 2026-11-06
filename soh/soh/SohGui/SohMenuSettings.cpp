@@ -1,5 +1,6 @@
 #include "SohMenu.h"
 #include "soh/Enhancements/speechsynthesizer/SpeechSynthesizer.h"
+#include "soh/SohGui/SohGui.hpp"
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/enhancementTypes.h"
 #include "SohModals.h"
@@ -266,7 +267,7 @@ void SohMenu::AddMenuSettings() {
             std::string current = CVarGetString(CVAR_SETTING("VoiceStudioVoice"), "default");
             auto choose = [](const std::string& v) {
                 CVarSetString(CVAR_SETTING("VoiceStudioVoice"), v.c_str());
-                Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
                 SpeechSynthesizer_ApplySettings();
             };
 
