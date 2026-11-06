@@ -1569,6 +1569,10 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 
     AudioCollection::Instance = new AudioCollection();
     ActorDB::Instance = new ActorDB();
+    if (CVarGetInteger(CVAR_SETTING("VoiceStudioTTS"), 0)) {
+        SpeechSynthesizer::Instance =
+            new VoiceStudioSpeechSynthesizer(CVarGetString(CVAR_SETTING("VoiceStudioVoice"), "default"));
+    } else {
 #ifdef __APPLE__
     SpeechSynthesizer::Instance = new DarwinSpeechSynthesizer();
 #elif defined(_WIN32)
@@ -1578,6 +1582,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 #else
     SpeechSynthesizer::Instance = new SpeechLogger();
 #endif
+    }
     SpeechSynthesizer::Instance->Init();
 
     CrowdControl::Instance = new CrowdControl();

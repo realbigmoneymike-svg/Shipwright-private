@@ -35,3 +35,4 @@ class SpeechSynthesizer {
 #endif
 
 #include "SpeechLogger.h"
+#include "VoiceStudioSpeechSynthesizer.h"
