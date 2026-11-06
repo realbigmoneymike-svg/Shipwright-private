@@ -53,15 +53,23 @@ struct VoiceStudioSpeechSynthesizer::Impl {
             std::ifstream f(p, std::ios::binary);
             return std::string((std::istreambuf_iterator<char>(f)), {});
         }
+        if (fs::exists(p.string() + ".part")) {
+            return {}; // the pre-render script is writing this one right now
+        }
         httplib::Client cli(host, port);
         cli.set_read_timeout(30);
         nlohmann::json body = { { "model", "tts-1" }, { "voice", voice }, { "input", text },
                                 { "response_format", "wav" } };
-        auto res = cli.Post("/v1/audio/speech", body.dump(), "application/json");
+        // replace: SoH can pass bytes that aren't valid UTF-8 (e.g. 0x80), which would otherwise throw
+        auto res = cli.Post("/v1/audio/speech", body.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace),
+                            "application/json");
         if (!res || res->status != 200) {
             return {}; // VoiceStudio not running or voice name wrong -> stay silent
         }
-        std::ofstream(p, std::ios::binary) << res->body;
+        std::error_code ec;
+        fs::path tmp = p.string() + ".game";
+        std::ofstream(tmp, std::ios::binary) << res->body;
+        fs::rename(tmp, p, ec); // never leave a half-written WAV in the cache
         return res->body;
     }
 
