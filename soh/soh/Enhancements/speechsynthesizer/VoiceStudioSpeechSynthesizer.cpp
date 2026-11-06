@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -94,6 +95,19 @@ struct VoiceStudioSpeechSynthesizer::Impl {
     SDL_AudioDeviceID device = 0;
     SDL_AudioSpec spec{};
 
+    // Harkinian Buddy can ask for quiet while its buddies talk: it keeps tts_cache/.buddy_mute
+    // fresh while it wants the game's voice muted. Left behind by a closed app, it goes stale
+    // after 30 seconds and the game speaks again.
+    bool MutedByBuddies() {
+        std::error_code ec;
+        fs::path flag = cacheDir / ".buddy_mute";
+        if (!fs::exists(flag, ec)) {
+            return false;
+        }
+        auto age = fs::file_time_type::clock::now() - fs::last_write_time(flag, ec);
+        return !ec && age < std::chrono::seconds(30);
+    }
+
     static std::string Hash(const std::string& voice, const std::string& text) {
         // FNV-1a 64-bit of "<voice>|<text>", same as prerender_soh_tts.py
         uint64_t h = 0xCBF29CE484222325ULL;
@@ -168,8 +182,9 @@ struct VoiceStudioSpeechSynthesizer::Impl {
         SDL_FreeWAV(buf);
         SDL_PauseAudioDevice(device, 0);
 
+        int ticks = 0;
         while (SDL_GetQueuedAudioSize(device) > 0 && running) {
-            if (interrupt) { // a newer line arrived: cut this one off
+            if (interrupt || (++ticks % 10 == 0 && MutedByBuddies())) { // newer line, or a buddy started talking
                 SDL_ClearQueuedAudio(device);
                 break;
             }
@@ -191,8 +206,22 @@ struct VoiceStudioSpeechSynthesizer::Impl {
                 v = voice;
                 interrupt = false;
             }
+            // Harkinian Buddy's voices have the floor: wait, and read this once they're done
+            // (unless a newer line replaces it first).
+            bool replaced = false;
+            while (running && MutedByBuddies()) {
+                SDL_Delay(100);
+                std::lock_guard<std::mutex> lk(mutex);
+                if (!queue.empty()) {
+                    replaced = true;
+                    break;
+                }
+            }
+            if (replaced || !running) {
+                continue;
+            }
             std::string wav = GetWav(v, line);
-            if (!wav.empty() && !interrupt) {
+            if (!wav.empty() && !interrupt && !MutedByBuddies()) {
                 Play(wav);
             }
         }
