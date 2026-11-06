@@ -1569,21 +1569,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 
     AudioCollection::Instance = new AudioCollection();
     ActorDB::Instance = new ActorDB();
-    if (CVarGetInteger(CVAR_SETTING("VoiceStudioTTS"), 0)) {
-        SpeechSynthesizer::Instance =
-            new VoiceStudioSpeechSynthesizer(CVarGetString(CVAR_SETTING("VoiceStudioVoice"), "default"));
-    } else {
-#ifdef __APPLE__
-    SpeechSynthesizer::Instance = new DarwinSpeechSynthesizer();
-#elif defined(_WIN32)
-    SpeechSynthesizer::Instance = new SAPISpeechSynthesizer();
-#elif ESPEAK
-    SpeechSynthesizer::Instance = new ESpeakSpeechSynthesizer();
-#else
-    SpeechSynthesizer::Instance = new SpeechLogger();
-#endif
-    }
-    SpeechSynthesizer::Instance->Init();
+    SpeechSynthesizer_ApplySettings(); // VoiceStudio voice or the system voice, from settings
 
     CrowdControl::Instance = new CrowdControl();
     Sail::Instance = new Sail();

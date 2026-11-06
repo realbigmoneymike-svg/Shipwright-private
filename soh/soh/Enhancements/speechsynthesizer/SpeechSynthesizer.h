@@ -11,6 +11,7 @@ class SpeechSynthesizer {
   public:
     static SpeechSynthesizer* Instance;
     SpeechSynthesizer();
+    virtual ~SpeechSynthesizer() = default;
 
     bool Init(void);
     void Uninitialize(void);

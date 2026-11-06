@@ -1,4 +1,5 @@
 #include "SohMenu.h"
+#include "soh/Enhancements/speechsynthesizer/SpeechSynthesizer.h"
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/enhancementTypes.h"
 #include "SohModals.h"
@@ -239,6 +240,78 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("A11yTTS"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Enables text to speech for in-game dialogue"));
+    AddWidget(path, "Use VoiceStudio Voice", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("VoiceStudioTTS"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_SETTING("A11yTTS"), 0); })
+        .Callback([](WidgetInfo& info) { SpeechSynthesizer_ApplySettings(); })
+        .Options(CheckboxOptions().Tooltip(
+            "Speak with a voice clone from VoiceStudio (keep VoiceStudio open) instead of the system voice.\n"
+            "Lines are saved in tts_cache, one folder per voice."));
+    AddWidget(path, "VoiceStudio Voice", WIDGET_CUSTOM)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) {
+            info.isHidden =
+                !CVarGetInteger(CVAR_SETTING("A11yTTS"), 0) || !CVarGetInteger(CVAR_SETTING("VoiceStudioTTS"), 0);
+        })
+        .CustomFunction([](WidgetInfo& info) {
+            static std::vector<std::string> voices;
+            static bool loaded = false;
+            static char newVoice[128] = "";
+            if (!loaded) {
+                VoiceStudioSpeechSynthesizer::RefreshServerVoices();
+                voices = VoiceStudioSpeechSynthesizer::KnownVoices();
+                loaded = true;
+            }
+            std::string current = CVarGetString(CVAR_SETTING("VoiceStudioVoice"), "default");
+            auto choose = [](const std::string& v) {
+                CVarSetString(CVAR_SETTING("VoiceStudioVoice"), v.c_str());
+                Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+                SpeechSynthesizer_ApplySettings();
+            };
+
+            ImGui::Text("Voice");
+            UIWidgets::PushStyleCombobox(THEME_COLOR);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+            if (ImGui::BeginCombo("##VoiceStudioVoice", current.c_str())) {
+                voices = VoiceStudioSpeechSynthesizer::KnownVoices();
+                if (voices.empty()) {
+                    ImGui::TextDisabled("No voices yet - type a name below");
+                }
+                for (auto& v : voices) {
+                    if (ImGui::Selectable(v.c_str(), v == current)) {
+                        choose(v);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            UIWidgets::PopStyleCombobox();
+            ImGui::SameLine();
+            if (UIWidgets::Button("Refresh##VoiceStudioRefresh", UIWidgets::ButtonOptions()
+                                                                    .Size(UIWidgets::Sizes::Inline)
+                                                                    .Color(THEME_COLOR)
+                                                                    .Padding(ImVec2(10.f, 6.f))
+                                                                    .Tooltip("Ask VoiceStudio for its voices"))) {
+                VoiceStudioSpeechSynthesizer::RefreshServerVoices();
+                voices = VoiceStudioSpeechSynthesizer::KnownVoices();
+            }
+
+            UIWidgets::PushStyleInput(THEME_COLOR);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+            ImGui::InputTextWithHint("##VoiceStudioNewVoice", "Other voice name...", newVoice, sizeof(newVoice));
+            UIWidgets::PopStyleInput();
+            ImGui::SameLine();
+            if (UIWidgets::Button("Use##VoiceStudioUse", UIWidgets::ButtonOptions()
+                                                             .Size(UIWidgets::Sizes::Inline)
+                                                             .Color(THEME_COLOR)
+                                                             .Padding(ImVec2(10.f, 6.f))
+                                                             .Tooltip("The name exactly as VoiceStudio shows it")) &&
+                newVoice[0] != 0) {
+                choose(newVoice);
+                newVoice[0] = 0;
+                voices = VoiceStudioSpeechSynthesizer::KnownVoices();
+            }
+        });
 #endif
     AddWidget(path, "Disable Idle Camera Re-Centering", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_SETTING("A11yDisableIdleCam"))
