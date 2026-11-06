@@ -196,6 +196,30 @@ void Anchor::SetDummyPlayerClientId(const Actor* actor, uint32_t clientId) {
     ObjectExtension::GetInstance().Set<DummyPlayerClientId>(actor, DummyPlayerClientId{ clientId });
 }
 
+// Add or remove the name tags over other players to match the "Show Player Names" option
+void Anchor::RefreshNameTags() {
+    if (!IsSaveLoaded()) {
+        return;
+    }
+
+    bool show = CVarGetInteger(CVAR_REMOTE_ANCHOR("ShowNameTags"), 1) &&
+                std::string("soh-global") != CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), "");
+
+    Actor* actor = gPlayState->actorCtx.actorLists[ACTORCAT_NPC].head;
+    while (actor != NULL) {
+        if (actor->id == ACTOR_EN_OE2 && actor->update == DummyPlayer_Update) {
+            NameTag_RemoveAllForActor(actor);
+            if (show) {
+                auto it = clients.find(GetDummyPlayerClientId(actor));
+                if (it != clients.end()) {
+                    NameTag_RegisterForActorWithOptions(actor, it->second.name.c_str(), {});
+                }
+            }
+        }
+        actor = actor->next;
+    }
+}
+
 void Anchor::RefreshClientActors() {
     if (!IsSaveLoaded()) {
         return;

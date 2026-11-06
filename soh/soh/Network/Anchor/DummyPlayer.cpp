@@ -92,7 +92,7 @@ void DummyPlayer_Init(Actor* actor, PlayState* play) {
 
     bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
 
-    if (!isGlobalRoom) {
+    if (!isGlobalRoom && CVarGetInteger(CVAR_REMOTE_ANCHOR("ShowNameTags"), 1)) {
         NameTag_RegisterForActorWithOptions(actor, client.name.c_str(), {});
     }
 }

@@ -113,6 +113,7 @@ class Anchor : public Network {
     void HandlePacket_UpdateTeamState(nlohmann::json payload);
 
   public:
+    void RefreshNameTags();
     uint32_t ownClientId;
     inline static const std::string clientVersion = (char*)gGitCommitHash;
 
