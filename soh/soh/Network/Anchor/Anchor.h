@@ -19,7 +19,7 @@ void DummyPlayer_Update(Actor* actor, PlayState* play);
 void DummyPlayer_Draw(Actor* actor, PlayState* play);
 void DummyPlayer_Destroy(Actor* actor, PlayState* play);
 
-typedef struct {
+typedef struct AnchorClient {
     uint32_t clientId;
     std::string name;
     Color_RGB8 color;
