@@ -113,5 +113,18 @@ void Anchor::HandlePacket_PlayerUpdate(nlohmann::json payload) {
         client.unk_862 = payload.value("unk_862", (s16)0);
         client.unk_85C = payload.value("unk_85C", (f32)0);
         client.actionVar1 = payload.value("actionVar1", (s8)0);
+
+        // Harkinian Buddy: the game does the walking (see DummyPlayer_Update)
+        if (client.isBuddy && payload.contains("drive") && payload["drive"].is_object()) {
+            const auto& drive = payload["drive"];
+            client.driveOn = true;
+            client.driveSpeed = drive.value("speed", 0.0f);
+            client.driveYaw = (s16)drive.value("yaw", 0);
+            client.driveJump = drive.value("jump", 0.0f);
+            client.driveJumpSeq = drive.value("jumpSeq", (u32)0);
+            client.driveFrame = gPlayState != nullptr ? gPlayState->gameplayFrames : 0;
+        } else {
+            client.driveOn = false;
+        }
     }
 }

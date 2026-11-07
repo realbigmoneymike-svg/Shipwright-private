@@ -1,4 +1,6 @@
 #include "Anchor.h"
+#include <algorithm>
+#include <unordered_map>
 #include "soh/Enhancements/nametag.h"
 
 extern "C" {
@@ -46,6 +48,78 @@ static DamageTable DummyPlayerDamageTable = {
     /* Unknown 2     */ DMG_ENTRY(0, PLAYER_HIT_RESPONSE_NONE),
 };
 
+static ColliderCylinderInit sBuddySwordInit = {
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
+    { ELEMTYPE_UNK2, { DMG_SLASH_KOKIRI, 0x00, 0x01 }, { 0, 0x00, 0x00 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE,
+      OCELEM_NONE },
+    { 35, 40, 0, { 0, 0, 0 } },
+};
+
+static std::unordered_map<uint32_t, ColliderCylinder> sBuddySwords;
+
+// A buddy's swing: a sword hitbox in front of it (all round it for a spin) for a few frames.
+static void BuddyDummy_Swing(AnchorClient& client, Player* player, PlayState* play) {
+    if (client.attackFrames == 0) {
+        return;
+    }
+    client.attackFrames--;
+    Actor* actor = &player->actor;
+    bool fresh = !sBuddySwords.contains(client.clientId);
+    ColliderCylinder& sword = sBuddySwords[client.clientId];
+    if (fresh) {
+        Collider_InitCylinder(play, &sword);
+    }
+    if (fresh || sword.base.actor != actor) {
+        Collider_SetCylinder(play, &sword, actor, &sBuddySwordInit);
+    }
+    sword.info.toucher.dmgFlags = client.attackDmgFlags;
+    sword.info.toucher.damage = client.attackDamage;
+    f32 reach = client.attackSpin ? 0.0f : 38.0f;
+    sword.dim.radius = client.attackSpin ? 80 : 32;
+    sword.dim.height = 45;
+    sword.dim.pos.x = (s16)(actor->world.pos.x + Math_SinS(actor->shape.rot.y) * reach);
+    sword.dim.pos.y = (s16)(actor->world.pos.y + 5.0f);
+    sword.dim.pos.z = (s16)(actor->world.pos.z + Math_CosS(actor->shape.rot.y) * reach);
+    CollisionCheck_SetAT(play, &play->colChkCtx, &sword.base);
+}
+
+// Walking the way the app steers, with the game's collision.
+static void BuddyDummy_Drive(AnchorClient& client, Player* player, PlayState* play) {
+    Actor* actor = &player->actor;
+    bool adult = client.linkAge == LINK_AGE_ADULT;
+    actor->world.rot.y = client.driveYaw;
+    actor->shape.rot.y = client.driveYaw;
+    actor->shape.rot.x = actor->shape.rot.z = 0;
+    actor->speedXZ = std::clamp(client.driveSpeed, 0.0f, adult ? 11.0f : 9.0f);
+    actor->gravity = -1.0f;
+    actor->minVelocityY = -20.0f;
+    if (client.driveJumpSeq != client.driveJumpDone) {
+        client.driveJumpDone = client.driveJumpSeq;
+        if (actor->bgCheckFlags & BGCHECKFLAG_GROUND) {
+            actor->velocity.y = std::clamp(client.driveJump, 0.0f, 12.0f);
+        }
+    }
+    if (actor->bgCheckFlags & BGCHECKFLAG_WATER) {
+        // swimming: float at the surface like Link does
+        if (actor->yDistToWater > 30.0f) {
+            actor->velocity.y = 2.0f;
+            actor->gravity = 0.0f;
+        } else if (actor->yDistToWater > 20.0f) {
+            actor->velocity.y = 0.0f;
+            actor->gravity = 0.0f;
+        }
+    }
+    Actor_MoveXZGravity(actor);
+    Actor_UpdateBgCheckInfo(play, actor, adult ? 26.0f : 20.0f, adult ? 18.0f : 15.0f, adult ? 56.0f : 40.0f,
+                            1 | 2 | 4);
+    if (actor->bgCheckFlags & BGCHECKFLAG_GROUND) {
+        actor->velocity.y = 0.0f;
+    }
+    if ((play->gameplayFrames % 2) == 0) {
+        Anchor::Instance->SendPacket_BuddyPos(client.clientId, actor);
+    }
+}
+
 void DummyPlayer_Init(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
 
@@ -84,6 +158,11 @@ void DummyPlayer_Init(Actor* actor, PlayState* play) {
     }
     player->cylinder.base.ocFlags2 = OC2_TYPE_1;
     player->cylinder.info.bumperFlags = BUMP_ON | BUMP_HOOKABLE | BUMP_NO_HITMARK;
+    if (client.isBuddy) {
+        // The attacker is never told it hit something: many enemies assume whatever they hit is
+        // you and knock you back or hurt you (a buddy getting hit used to hurt you too).
+        player->cylinder.info.bumperFlags |= BUMP_NO_AT_INFO;
+    }
     player->actor.flags |= ACTOR_FLAG_HOOKSHOT_PULLS_PLAYER;
     player->cylinder.dim.radius = 30;
     player->actor.colChkInfo.damageTable = &DummyPlayerDamageTable;
@@ -121,13 +200,30 @@ void DummyPlayer_Update(Actor* actor, PlayState* play) {
         actor->world.pos.y = -9999.0f;
         actor->world.pos.z = -9999.0f;
         actor->shape.shadowAlpha = 0;
+        client.driveHidden = true;
         return;
     }
 
     actor->shape.shadowAlpha = 255;
     Math_Vec3s_Copy(&player->upperLimbRot, &client.upperLimbRot);
-    Math_Vec3s_Copy(&actor->shape.rot, &client.posRot.rot);
-    Math_Vec3f_Copy(&actor->world.pos, &client.posRot.pos);
+    // Harkinian Buddy: walking the game does itself. The app steers; the game's own collision
+    // decides where the buddy ends up - walls stop it, floors carry it, it falls off ledges.
+    bool driving = client.isBuddy && client.driveOn && !client.driveHidden &&
+                   (u32)(play->gameplayFrames - client.driveFrame) < 20;
+    if (driving) {
+        BuddyDummy_Drive(client, player, play);
+    } else {
+        Math_Vec3s_Copy(&actor->shape.rot, &client.posRot.rot);
+        Math_Vec3f_Copy(&actor->world.pos, &client.posRot.pos);
+        actor->velocity.y = 0.0f;
+    }
+    client.driveHidden = false;
+    if (client.isBuddy) {
+        BuddyDummy_Swing(client, player, play);
+        if ((play->gameplayFrames % 10) == (client.clientId % 10)) {
+            Anchor::Instance->SendPacket_EnemyState(client.clientId, actor->world.pos);
+        }
+    }
     player->skelAnime.jointTable = client.jointTable;
     player->skelAnime.movementFlags = client.movementFlags;
     Math_Vec3s_Copy(&player->skelAnime.prevTransl, &client.prevTransl);
@@ -148,6 +244,10 @@ void DummyPlayer_Update(Actor* actor, PlayState* play) {
     // Apply animation movement (Copied from Player_ApplyAnimMovementScaledByAge)
     Vec3f diff;
     SkelAnime_UpdateTranslation(&player->skelAnime, &diff, player->actor.shape.rot.y);
+
+    if (driving) {
+        diff.x = diff.y = diff.z = 0.0f; // the game moved it already
+    }
 
     if (player->skelAnime.movementFlags & 1) {
         if (!LINK_IS_ADULT) {

@@ -59,6 +59,22 @@ typedef struct {
     f32 ocarinaModulator;
     s8 ocarinaBend;
 
+    // Harkinian Buddy: walking the game does itself, with real collision ("drive" in a buddy's
+    // PLAYER_UPDATE): the app steers (direction, speed, jump), the game moves the dummy.
+    bool driveOn = false;
+    f32 driveSpeed = 0.0f;
+    s16 driveYaw = 0;
+    f32 driveJump = 0.0f;
+    u32 driveJumpSeq = 0;
+    u32 driveJumpDone = 0;
+    u32 driveFrame = 0;
+    bool driveHidden = true;
+    // Harkinian Buddy: a swing in progress (BUDDY_ATTACK)
+    u8 attackFrames = 0;
+    u32 attackDmgFlags = 0;
+    u8 attackDamage = 0;
+    bool attackSpin = false;
+
     // Ptr to the dummy player
     Player* player;
 } AnchorClient;
@@ -92,6 +108,7 @@ class Anchor : public Network {
     void HandlePacket_AllClientState(nlohmann::json payload);
     void HandlePacket_ConsumeAdultTradeItem(nlohmann::json payload);
     void HandlePacket_DamagePlayer(nlohmann::json payload);
+    void HandlePacket_BuddyAttack(nlohmann::json payload);
     void HandlePacket_DisableAnchor(nlohmann::json payload);
     void HandlePacket_EntranceDiscovered(nlohmann::json payload);
     void HandlePacket_GameComplete(nlohmann::json payload);
@@ -121,6 +138,9 @@ class Anchor : public Network {
     inline static const std::string ALL_CLIENT_STATE = "ALL_CLIENT_STATE";
     inline static const std::string DAMAGE_PLAYER = "DAMAGE_PLAYER";
     inline static const std::string BUDDY_HIT = "BUDDY_HIT";
+    inline static const std::string BUDDY_ATTACK = "BUDDY_ATTACK";
+    inline static const std::string BUDDY_POS = "BUDDY_POS";
+    inline static const std::string ENEMY_STATE = "ENEMY_STATE";
     inline static const std::string DISABLE_ANCHOR = "DISABLE_ANCHOR";
     inline static const std::string ENTRANCE_DISCOVERED = "ENTRANCE_DISCOVERED";
     inline static const std::string GAME_COMPLETE = "GAME_COMPLETE";
@@ -162,6 +182,8 @@ class Anchor : public Network {
     void SendPacket_ClearTeamState(std::string teamId);
     void SendPacket_DamagePlayer(u32 clientId, u8 damageEffect, u8 damage);
     void SendPacket_BuddyHit(u32 clientId, u8 damage, u8 damageEffect, s16 attackerActorId, Vec3f attackerPos);
+    void SendPacket_BuddyPos(u32 clientId, Actor* actor);
+    void SendPacket_EnemyState(u32 clientId, Vec3f center);
     void SendPacket_EntranceDiscovered(u16 entranceIndex);
     void SendPacket_GameComplete();
     void SendPacket_GiveItem(u16 modId, s16 getItemId);
